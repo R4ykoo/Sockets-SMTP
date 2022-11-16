@@ -482,7 +482,6 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
 	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
 	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
-	char f[BUFFERSIZE] = "ENVIA COSAS PERROOO\r\n";
 	int flagQuit = 1;
 	
 	/*Al no tener UDP confirmación, debemos enviar en bucle desde el cliente la misma línea de fichero hasta que recibamos aquí la línea 
@@ -544,13 +543,6 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 				continue;
 			}
 			// Sigue recibiendo datos ya que todavía no ha llegado el punto solitario
-			/*nc = sendto (s, f, strlen(f), 0, (struct sockaddr *)&clientaddr_in, addrlen);
-
-				if (nc == -1) {
-					perror("serverUDP: No se ha podido enviar el mensaje de OK en FINTXT");
-					printf("%s: sendto FINTXT 250 error\n", "serverUDP");
-					return;
-				}*/
 			continue;
 		}
 
@@ -637,38 +629,5 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 			}
 
 	}
-
-
-
-	/* FUNCIONALIDAD ORIGINAL
-	int addrlen;
-    
-   	addrlen = sizeof(struct sockaddr_in);
-
-      memset (&hints, 0, sizeof (hints));
-      hints.ai_family = AF_INET;
-		/7 Treat the message as a string containing a hostname. 7/
-	    // Esta funci�n es la recomendada para la compatibilidad con IPv6 gethostbyname queda obsoleta. //
-    errcode = getaddrinfo (buffer, NULL, &hints, &res); 
-    if (errcode != 0){
-		// Name was not found.  Return a
-		 * special value signifying the error. //
-		reqaddr.s_addr = ADDRNOTFOUND;
-      }
-    else {
-		// Copy address of host into the return buffer. //
-		reqaddr = ((struct sockaddr_in *) res->ai_addr)->sin_addr;
-	}
-     freeaddrinfo(res);
-
-	nc = sendto (s, &reqaddr, sizeof(struct in_addr),
-			0, (struct sockaddr *)&clientaddr_in, addrlen);
-	if ( nc == -1) {
-         perror("serverUDP");
-         printf("%s: sendto error\n", "serverUDP");
-         return;
-         }   
-	*/
-	
 		 
  }

@@ -249,20 +249,6 @@ char *argv[];
 				if(checker == line) flagData = 1;
 				
     		}
-
-			/*
-			      alarm(0);
-            // Print out response. 
-            if (reqaddr.s_addr == ADDRNOTFOUND) 
-               printf("Host %s unknown by nameserver %s\n", argv[2], argv[1]);
-            else {
-                // inet_ntop para interoperatividad con IPv6 //
-                if (inet_ntop(AF_INET, &reqaddr, hostname, MAXHOST) == NULL)
-                   perror(" inet_ntop \n");
-                printf("Address for %s is %s\n", argv[2], hostname);
-                }	
-			*/
-			
             break;	
     	}
   }
