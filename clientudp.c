@@ -83,6 +83,7 @@ char *argv[];
     ssize_t read;
 	int flagData = 0;
 	int nc;
+	char * checker = NULL;
 
 	if (argc != 4) {
 		fprintf(stderr, "Usage:  %s <nameserver> <target>\n", argv[0]); //cambiar en final
@@ -209,7 +210,7 @@ char *argv[];
 			fprintf(stdout,"CLIENTEUDP antes while - Recibo: %s\n",buffer);
 			while ((read = getline(&line, &len, fOrd)) != -1) {
 				
-       			fprintf(stdout,"CLIENTUDP - Envio: %s", line);
+       			//fprintf(stdout,"CLIENTUDP - Envio: %s", line);
 				/*
 					Enviará las lineas del fichero de ordenes y esperará respuesta.
 					Si se envía DATA, no espera respuestas hasta que envíe .
@@ -220,15 +221,15 @@ char *argv[];
         			exit(1);
         		}
 
-				/*
-				// Comienza el envío de DATA, no esperará respuesta hasta que envíe .
-				if(strcmp(line,"DATA") == 0) flagData = 1;
+				
+				
 				// Si envío el . termino de enviar Data y puedo recibir respuesta
-				if(strcmp(line, ".") == 0) flagData = 0;
+				checker = strstr(line,".");
+				if(checker == line) flagData = 0;
 				// Si estoy enviando data, no tengo que esperar a recibir nada hasta que envíe el .
 				if(flagData != 0){
 					continue;
-				}*/
+				}
 
 				nc = recvfrom(s, buffer, BUFFERSIZE - 1, 0,	(struct sockaddr *)&servaddr_in, &addrlen);
 	
@@ -242,7 +243,10 @@ char *argv[];
 				
 				fprintf(stdout,"CLIENTEUDP - Recibo: %s\n",buffer);			
 
-				
+				// Comienza el envío de DATA, espera a recibir la respuesta 354, y luego no espera recepcion hasta que 
+				// envíe un punto
+				checker = strstr(line, "DATA");
+				if(checker == line) flagData = 1;
 				
     		}
 
@@ -258,7 +262,7 @@ char *argv[];
                 printf("Address for %s is %s\n", argv[2], hostname);
                 }	
 			*/
-      
+			
             break;	
     	}
   }

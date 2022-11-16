@@ -519,15 +519,20 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 		 Ahora en buffer tenemos la req del cliente, tenemos que tratarla y hacer lo consecuente
 		*/
 		fprintf(stdout,"SERVIDOR - Recibo: %s\n",buffer);
+		
 			
 		char *checker = NULL;
 
 		if(flagData == 0){
 			// Está leyendo data, solo va a parar cuando lea un . solo
-			if(strcmp(buffer,".") == 0){
-				// Fin de envío de datos
 
-				fprintf(stdout,"Servidor: Envio ok tras .\n");
+			/* 
+			strcmp(buffer,".") No funciona aquí, no sé por qué, lo haré con el metodo de checker, 
+			pero si en el cuerpo de Data alguna frase comienza con punto, se lo tragará como si eso es el final.
+			*/
+			checker = strstr(buffer, ".");	
+			if(checker == buffer){
+				// Fin de envío de datos
 				nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 				if (nc == -1) {
@@ -539,13 +544,13 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 				continue;
 			}
 			// Sigue recibiendo datos ya que todavía no ha llegado el punto solitario
-			nc = sendto (s, f, strlen(f), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+			/*nc = sendto (s, f, strlen(f), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 				if (nc == -1) {
 					perror("serverUDP: No se ha podido enviar el mensaje de OK en FINTXT");
 					printf("%s: sendto FINTXT 250 error\n", "serverUDP");
 					return;
-				}
+				}*/
 			continue;
 		}
 
