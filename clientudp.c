@@ -34,7 +34,7 @@ extern int errno;
 #define ADDRNOTFOUND	0xffffffff	/* value returned for unknown host */
 #define RETRIES	5		/* number of times to retry before givin up */
 #define BUFFERSIZE	1024	/* maximum size of packets to be received */
-#define PUERTO 17278
+#define PUERTO 15667
 #define TIMEOUT 6
 #define MAXHOST 512
 /*
@@ -77,8 +77,15 @@ char *argv[];
    	char hostname[MAXHOST];
    	struct addrinfo hints, *res;
 
-	if (argc != 3) {
-		fprintf(stderr, "Usage:  %s <nameserver> <target>\n", argv[0]);
+	char buffer[BUFFERSIZE];
+	char * line = NULL;
+    size_t len = 0;
+    ssize_t read;
+	int flagData = 0;
+	int nc;
+
+	if (argc != 4) {
+		fprintf(stderr, "Usage:  %s <nameserver> <target>\n", argv[0]); //cambiar en final
 		exit(1);
 	}
 	
@@ -133,7 +140,7 @@ char *argv[];
 		 */
       memset (&hints, 0, sizeof (hints));
       hints.ai_family = AF_INET;
- 	 /* esta funci�n es la recomendada para la compatibilidad con IPv6 gethostbyname queda obsoleta*/
+ 	 /* esta funci�n es la recomendada para la compatibilidad con IPv6 gethostbyname queda obsoleta*/
     errcode = getaddrinfo (argv[1], NULL, &hints, &res); 
     if (errcode != 0){
 			/* Name was not found.  Return a
@@ -160,7 +167,15 @@ char *argv[];
         }
 	
     n_retry=RETRIES;
-    
+    //Abrir el archivo
+	FILE *fOrd = fopen(argv[3], "r");
+
+	if (fOrd == -1){
+			perror(argv[0]);
+        	fprintf(stderr, "Error al abrir el archivo %s", argv[3]);
+        	exit(1);
+	}
+	
 	while (n_retry > 0) {
 		/* Send the request to the nameserver. */
         if (sendto (s, argv[2], strlen(argv[2]), 0, (struct sockaddr *)&servaddr_in,
@@ -175,7 +190,7 @@ char *argv[];
 		 */
 	    alarm(TIMEOUT);
 		/* Wait for the reply to come in. */
-        if (recvfrom (s, &reqaddr, sizeof(struct in_addr), 0,
+        if (recvfrom (s, buffer, BUFFERSIZE -1 , 0,
 						(struct sockaddr *)&servaddr_in, &addrlen) == -1) {
     		if (errno == EINTR) {
     				/* Alarm went off and aborted the receive.
@@ -188,21 +203,64 @@ char *argv[];
             else  {
 				printf("Unable to get response from");
 				exit(1); 
-                }
-              } 
+            }
+        }
         else {
-            alarm(0);
-            /* Print out response. */
+			fprintf(stdout,"CLIENTEUDP antes while - Recibo: %s\n",buffer);
+			while ((read = getline(&line, &len, fOrd)) != -1) {
+				
+       			fprintf(stdout,"CLIENTUDP - Envio: %s", line);
+				/*
+					Enviará las lineas del fichero de ordenes y esperará respuesta.
+					Si se envía DATA, no espera respuestas hasta que envíe .
+				*/
+				if (sendto (s, line, strlen(line), 0, (struct sockaddr *)&servaddr_in, sizeof(struct sockaddr_in)) == -1) {
+        			perror(argv[0]);
+        			fprintf(stderr, "%s: unable to send request\n", argv[0]);
+        			exit(1);
+        		}
+
+				/*
+				// Comienza el envío de DATA, no esperará respuesta hasta que envíe .
+				if(strcmp(line,"DATA") == 0) flagData = 1;
+				// Si envío el . termino de enviar Data y puedo recibir respuesta
+				if(strcmp(line, ".") == 0) flagData = 0;
+				// Si estoy enviando data, no tengo que esperar a recibir nada hasta que envíe el .
+				if(flagData != 0){
+					continue;
+				}*/
+
+				nc = recvfrom(s, buffer, BUFFERSIZE - 1, 0,	(struct sockaddr *)&servaddr_in, &addrlen);
+	
+				if ( nc == -1) {
+					perror("clientUDP");
+					fprintf(stderr,"%s: recvfrom error\n", "clientUDP");
+					exit(1);
+				}
+
+				buffer[nc]='\0';
+				
+				fprintf(stdout,"CLIENTEUDP - Recibo: %s\n",buffer);			
+
+				
+				
+    		}
+
+			/*
+			      alarm(0);
+            // Print out response. 
             if (reqaddr.s_addr == ADDRNOTFOUND) 
                printf("Host %s unknown by nameserver %s\n", argv[2], argv[1]);
             else {
-                /* inet_ntop para interoperatividad con IPv6 */
+                // inet_ntop para interoperatividad con IPv6 //
                 if (inet_ntop(AF_INET, &reqaddr, hostname, MAXHOST) == NULL)
                    perror(" inet_ntop \n");
                 printf("Address for %s is %s\n", argv[2], hostname);
                 }	
+			*/
+      
             break;	
-            }
+    	}
   }
 
     if (n_retry == 0) {

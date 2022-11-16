@@ -155,8 +155,12 @@ char *argv[];
 			 * waiting for connections and forking a child
 			 * server to handle each one.
 			 */
-		fclose(stdin);
-		fclose(stderr);
+		
+		/*
+			fclose(stdin);
+			fclose(stderr);
+		*/
+		
 
 			/* Set SIGCLD to SIG_IGN, in order to prevent
 			 * the accumulation of zombies as each child
@@ -260,15 +264,18 @@ char *argv[];
                 myaddr_in.sin_family = AF_INET;
 			    myaddr_in.sin_addr.s_addr = INADDR_ANY;
                 myaddr_in.sin_port = 0; 
-                if (s_UDP_hijo = socket (AF_INET, SOCK_DGRAM, 0) == -1){
+				s_UDP_hijo = socket (AF_INET, SOCK_DGRAM, 0);
+
+                if(s_UDP_hijo == -1){
                     perror(argv[0]);
                     printf("%s: No pudo crearse socket UDP cliente\n", argv[0]);
                     exit (1);
                 }
+				
                 //Lo enlazamos a la dirección correspondiente como hicimos con el principal
                 if (bind(s_UDP_hijo, (struct sockaddr *) &myaddr_in, sizeof(struct sockaddr_in)) == -1) {
 		            perror(argv[0]);
-		            printf("%s: unable to bind address UDP\n", argv[0]);
+		            printf("%s: unable to bind address UDP_hijo\n", argv[0]);
 		            exit(1);
 	            }
                 //como con el socketTCP, hacemos que el nuevo socket sea manejado por el hijo (codigo copiado de bloque TCP de arriba)
@@ -461,55 +468,171 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
     struct in_addr reqaddr;	/* for requested host's address */
     struct hostent *hp;		/* pointer to host info for requested host */
     int nc, errcode;
-	boolean flagData = false;
+	int flagData = 1;
     struct addrinfo hints, *res;
 
 	int addrlen;
    	addrlen = sizeof(struct sockaddr_in);
+	/*
+		GERMAN:
+		Quizas es mejor que los mensajes sean structs con un elemento que sea el numero y otro que sea la descripcion
+	*/
+	char ack[BUFFERSIZE]="220 Servicio de transferencia simple de correo preparado\r\n";
+	char ok[BUFFERSIZE] = "250 OK\r\n";
+	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
+	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
+	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
+	char f[BUFFERSIZE] = "ENVIA COSAS PERROOO\r\n";
+	int flagQuit = 1;
+	
 	/*Al no tener UDP confirmación, debemos enviar en bucle desde el cliente la misma línea de fichero hasta que recibamos aquí la línea 
 	y confirmemos que la hemos recibido para que pase a enviar la siguiente en bucle*/
-	char ack[BUFFERSIZE]='OK';
-	nc = sendto (s, ack, sizeof(struct in_addr),
-			0, (struct sockaddr *)&clientaddr_in, addrlen);
-	if ( nc == -1) {
-         perror("serverUDP");
-         printf("%s: sendto error\n", "serverUDP");
-         return;
-         }
 
-	else {
-		//comprobamos que orden ha sido enviada por el cliente
-		if (strchr(buffer, 'HELO') != NULL){
+/*
+	GERMAN:
+	Antes de entrar al bucle de req-res debería indicar que el servidor está preparado, mandando el mensaje 220
+	Luego, entrará en bucle infinito hasta que se active una flag, que será cuando reciba QUIT ó algún error.
+	En este bucle infinito lo primeroque hace es recibir, con la linea recibida saca la orden o error y hace lo necesario
+*/
+	nc = sendto (s, ack, strlen(ack), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
+	if (nc == -1) {
+		perror("serverUDP: No se ha podido enviar el mensaje de servicio preparado");
+		printf("%s: sendto 220 error\n", "serverUDP");
+		return;
+	}
+
+	while(flagQuit != 0) {
+
+		nc = recvfrom(s, buffer, BUFFERSIZE - 1, 0,
+				(struct sockaddr *)&clientaddr_in, &addrlen);
+	
+		if ( nc == -1) {
+			perror("serverUDP");
+			printf("%s: recvfrom error\n", "serverUDP");
+			return;
 		}
 
-		else if (strchr(buffer, 'RCPT TO:') != NULL){
+		buffer[nc]='\0';
 
-		}
-
-		else if (strchr(buffer, 'MAIL FROM:') != NULL){
+		/*
+		 Ahora en buffer tenemos la req del cliente, tenemos que tratarla y hacer lo consecuente
+		*/
+		fprintf(stdout,"SERVIDOR - Recibo: %s\n",buffer);
 			
+		char *checker = NULL;
+
+		if(flagData == 0){
+			// Está leyendo data, solo va a parar cuando lea un . solo
+			if(strcmp(buffer,".") == 0){
+				// Fin de envío de datos
+
+				fprintf(stdout,"Servidor: Envio ok tras .\n");
+				nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+				if (nc == -1) {
+					perror("serverUDP: No se ha podido enviar el mensaje de OK en FINTXT");
+					printf("%s: sendto FINTXT 250 error\n", "serverUDP");
+					return;
+				}
+				flagData = 1;
+				continue;
+			}
+			// Sigue recibiendo datos ya que todavía no ha llegado el punto solitario
+			nc = sendto (s, f, strlen(f), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+				if (nc == -1) {
+					perror("serverUDP: No se ha podido enviar el mensaje de OK en FINTXT");
+					printf("%s: sendto FINTXT 250 error\n", "serverUDP");
+					return;
+				}
+			continue;
 		}
 
-		else if (strchr(buffer, 'DATA') != NULL){
-			flagData = true;
-		}
-		/* Una vez entremos en DATA activamos una flag para saber que las siguientes lineas
-		pertenecen al mensaje aunque no contengan órdenes. La desactivamos
-		cuando la línea sea un punto*/ 
-		else if (strcmp(buffer,'.' == 0){
-			flagData = false;
+		checker = strstr(buffer, "HELO");	
+		if(checker == buffer){
+			// Comienza por HELO
+			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de OK en HELO");
+				printf("%s: sendto HELO 250 error\n", "serverUDP");
+				return;
+			}
+			continue;
 		}
 
-		else if (strchr(buffer, 'QUIT') != NULL){
-			
+		checker = strstr(buffer, "MAIL FROM:");
+		if(checker == buffer){
+			// Comienza por MAIL FROM:
+			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de OK en MAIL");
+				printf("%s: sendto MAIL 250 error\n", "serverUDP");
+				return;
+			}
+			continue;
 		}
 
-		else if (strchr(buffer, 'HOLA') != NULL){
-			
+		checker = strstr(buffer, "RCPT TO:");
+		if(checker == buffer){
+			// Comienza por RCPT TO:
+			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de OK en RCPT");
+				printf("%s: sendto RCPT 250 error\n", "serverUDP");
+				return;
+			}
+			continue;
 		}
+
+		checker = strstr(buffer, "DATA");
+		if(checker == buffer){
+			// Comienza por DATA
+			nc = sendto (s, dataRes, strlen(dataRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de 354 en DATA");
+				printf("%s: sendto DATA 354 error\n", "serverUDP");
+				return;
+			}
+			// Activar un flag de que está leyendo DATA
+			flagData = 0;
+			continue;
+		}
+		
+		checker = strstr(buffer, "QUIT");
+		if(checker == buffer){
+			// Comienza por QUIT
+			nc = sendto (s, quitRes, strlen(quitRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de 221 en QUIT");
+				printf("%s: sendto QUIT 221 error\n", "serverUDP");
+				return;
+			}
+			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
+			flagQuit = 0;
+			continue;
+		}
+		
+		/*
+		 Si aun no ha salido, del bucle es que no comienza por ninguna de las ordenes
+		 por lo que será un error de sintaxis. 
+		*/
+
+		nc = sendto (s, errRes, strlen(errRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+			if (nc == -1) {
+				perror("serverUDP: No se ha podido enviar el mensaje de 500 en ERRSYN");
+				printf("%s: sendto ERRSYN 500 error\n", "serverUDP");
+				return;
+			}
 
 	}
+
 
 
 	/* FUNCIONALIDAD ORIGINAL

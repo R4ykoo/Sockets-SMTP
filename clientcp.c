@@ -74,7 +74,7 @@ char *argv[];
 	 * user passed in. */
       memset (&hints, 0, sizeof (hints));
       hints.ai_family = AF_INET;
- 	 /* esta función es la recomendada para la compatibilidad con IPv6 gethostbyname queda obsoleta*/
+ 	 /* esta funciï¿½n es la recomendada para la compatibilidad con IPv6 gethostbyname queda obsoleta*/
     errcode = getaddrinfo (argv[1], NULL, &hints, &res); 
     if (errcode != 0){
 			/* Name was not found.  Return a
@@ -126,6 +126,33 @@ char *argv[];
 			argv[1], ntohs(myaddr_in.sin_port), (char *) ctime(&timevar));
 
 
+
+	/* Send the requests. */
+	
+	
+	FILE * fp;
+    char * line = NULL;
+    size_t len = 0;
+    ssize_t read;
+
+    fp = fopen("./ordenes/ordenes.txt", "r");
+    if (fp == NULL)
+        exit(EXIT_FAILURE);
+
+    while ((read = getline(&line, &len, fp)) != -1) {
+		strcpy(buf,line);
+		printf("Enviando: %s", buf);
+		if (send(s, line, strlen(line), 0) == -1) {
+			fprintf(stderr, "%s: Connection aborted on error ",	argv[0]);
+			fprintf(stderr, "on send number %d\n", i);
+			exit(1);
+		}
+    }
+
+	
+
+	
+	/*
 	for (i=1; i<=5; i++) {
 		*buf = i;
 		if (send(s, buf, TAM_BUFFER, 0) != TAM_BUFFER) {
@@ -134,6 +161,8 @@ char *argv[];
 			exit(1);
 		}
 	}
+	*/
+	
 
 		/* Now, shutdown the connection for further sends.
 		 * This will cause the server to receive an end-of-file
