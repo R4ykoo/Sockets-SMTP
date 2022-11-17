@@ -328,7 +328,7 @@ char *argv[];
 void serverTCP(int s, struct sockaddr_in clientaddr_in)
 {
 	int reqcnt = 0;		/* keeps count of number of requests */
-	char buf[TAM_BUFFER];		/* This example uses TAM_BUFFER byte messages. */
+	char buf[BUFFERSIZE];		/* This example uses TAM_BUFFER byte messages. */
 	char hostname[MAXHOST];		/* remote host's name string */
 
 	int len, len1, status;
@@ -337,7 +337,17 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
     
     struct linger linger;		/* allow a lingering, graceful close; */
     				            /* used when setting SO_LINGER */
-    				
+	
+	/*
+	Cogemos los mismos mensajes que hemos utilizado en el serverUDP
+	*/
+    char ack[BUFFERSIZE]="220 Servicio de transferencia simple de correo preparado\r\n";
+	char ok[BUFFERSIZE] = "250 OK\r\n";
+	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
+	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
+	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
+	int flagData = 1;				
+	
 	/* Look up the host information for the remote host
 	 * that we have connected with.  Its internet address
 	 * was returned by the accept call, in the main
@@ -367,6 +377,13 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 	printf("Startup from %s port %u at %s",
 		hostname, ntohs(clientaddr_in.sin_port), (char *) ctime(&timevar));
 
+	//Le notificamos al cliente que el servidorTCP ya está operativo
+	if (send(s,ack, BUFFERSIZE, 0) != BUFFERSIZE){
+		perror("serverTCP: No se ha podido enviar el mensaje de servicio preparado");
+		printf("%s: send 220 error\n", "serverTCP");
+		return;
+	} 
+
 		/* Set the socket for a lingering, graceful close.
 		 * This will cause a final close of this socket to wait until all of the
 		 * data sent on it has been received by the remote host.
@@ -388,7 +405,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		 * how the server will know that no more requests will
 		 * follow, and the loop will be exited.
 		 */
-	while (len = recv(s, buf, TAM_BUFFER, 0)) {
+	while (len = recv(s, buf, BUFFERSIZE, 0)) {
 		if (len == -1) errout(hostname); /* error from recv */
 			/* The reason this while loop exists is that there
 			 * is a remote possibility of the above recv returning
@@ -404,8 +421,8 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			 * next recv at the top of the loop will start at
 			 * the begining of the next request.
 			 */
-		while (len < TAM_BUFFER) {
-			len1 = recv(s, &buf[len], TAM_BUFFER-len, 0);
+		while (len < BUFFERSIZE) {
+			len1 = recv(s, &buf[len], BUFFERSIZE-len, 0);
 			if (len1 == -1) errout(hostname);
 			len += len1;
 		}
@@ -416,7 +433,100 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			 */
 		sleep(1);
 			/* Send a response back to the client. */
-		if (send(s, buf, TAM_BUFFER, 0) != TAM_BUFFER) errout(hostname);
+		buf[len]='\0';
+		//Tratamos la orden recibida y su respuesta igual que con serverUDP
+		fprintf(stdout,"SERVIDOR - Recibo: %s\n",buf);
+		char *checker = NULL;
+
+		//Mientras lea data
+
+		if(flagData == 0){
+			// Está leyendo data, solo va a parar cuando lea un . solo. Revisar strcmp
+			checker = strstr(buf, ".");	
+			if(checker == buf){
+				// Fin de envío de datos
+				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de OK en FINTXT");
+					printf("%s: send FINTXT 250 error\n", "serverTCP");
+					return;
+				} 
+				flagData = 1;
+				continue;
+			}
+			continue;
+		}
+		checker = strstr(buf, "HELO");	
+		if(checker == buf){
+			// Comienza por HELO
+			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de OK en HELO");
+					printf("%s: send HELO 250 error\n", "serverTCP");
+					return;
+				} 
+			continue;
+		}
+
+		checker = strstr(buf, "MAIL FROM:");
+		if(checker == buf){
+			// Comienza por MAIL FROM:
+			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de OK en MAIL FROM");
+					printf("%s: send MAIL 250 error\n", "serverTCP");
+					return;
+				} 
+			continue;
+		}
+
+		checker = strstr(buf, "RCPT TO:");
+		if(checker == buf){
+			// Comienza por RCPT TO:
+			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de OK en RCPT TO");
+					printf("%s: send RCPT 250 error\n", "serverTCP");
+					return;
+				} 
+			continue;
+		}
+
+		checker = strstr(buf, "DATA");
+		if(checker == buf){
+			// Comienza por DATA
+			if(send (s, dataRes, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de 354 en DATA");
+					printf("%s: send DATA 354 error\n", "serverTCP");
+					return;
+				} 
+			
+			// Activar el flag de que está leyendo DATA
+			flagData = 0;
+			continue;
+		}
+		
+		checker = strstr(buf, "QUIT");
+		if(checker == buf){
+			// Comienza por QUIT
+			if(send (s, quitRes, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de 221 en QUIT");
+					printf("%s: send QUIT 221 error\n", "serverTCP");
+					return;
+				} 
+			
+			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
+			
+			continue;
+		}
+		
+		/*
+		 Si aun no ha salido, del bucle es que no comienza por ninguna de las ordenes
+		 por lo que será un error de sintaxis. 
+		*/
+
+		if(send (s, errRes, BUFFERSIZE, 0) != BUFFERSIZE){
+					perror("serverTCP: No se ha podido enviar el mensaje de 500 en ERRSYN");
+					printf("%s: send ERRSYN 500 error\n", "serverTCP");
+					return;
+				} 
+			continue;
 	}
 
 		/* The loop has terminated, because there are no
@@ -439,8 +549,9 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		 * that this program could easily be ported to a host
 		 * that does require it.
 		 */
-	printf("Completed %s port %u, %d requests, at %s\n",
-		hostname, ntohs(clientaddr_in.sin_port), reqcnt, (char *) ctime(&timevar));
+
+	/*printf("Completed %s port %u, %d requests, at %s\n",
+		hostname, ntohs(clientaddr_in.sin_port), reqcnt, (char *) ctime(&timevar));*/
 }
 
 /*
