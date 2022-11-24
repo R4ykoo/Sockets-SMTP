@@ -36,13 +36,14 @@ extern int errno;
  *
  */
  
+int validEmail(char str[]); // Funcion para comprobar que los emails son válidos
 void serverTCP(int s, struct sockaddr_in peeraddr_in);
 void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in);
 void errout(char *);		/* declare error out routine */
 
 int FIN = 0;             /* Para el cierre ordenado */
 void finalizar(){ FIN = 1; }
-
+FILE *fPet;
 int main(argc, argv)
 int argc;
 char *argv[];
@@ -137,6 +138,8 @@ char *argv[];
 		 * with that terminal as its control terminal.  It is
 		 * always best for the parent to do the setpgrp.
 		 */
+	//Archivo .log
+	fPet = fopen("peticiones.log","a");// no sobreescribe, escribe al final en caso de existir el archivo
 	setpgrp();
 
 	switch (fork()) {
@@ -306,7 +309,7 @@ char *argv[];
         /* Cerramos los sockets UDP y TCP */
         close(ls_TCP);
         close(s_UDP);
-    
+		fclose(fPet);
         printf("\nFin de programa servidor!\n");
         
 	default:		/* Parent process comes here. */
@@ -331,13 +334,15 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 	char buf[BUFFERSIZE];		/* This example uses TAM_BUFFER byte messages. */
 	char hostname[MAXHOST];		/* remote host's name string */
 
-	int len, len1, status;
+	int len, len1, status,status2;
     struct hostent *hp;		/* pointer to host info for remote host */
     long timevar;			/* contains time returned by time() */
     
     struct linger linger;		/* allow a lingering, graceful close; */
     				            /* used when setting SO_LINGER */
-	
+
+
+
 	/*
 	Cogemos los mismos mensajes que hemos utilizado en el serverUDP
 	*/
@@ -346,8 +351,9 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
 	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
 	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
-	int flagData = 1;				
-	
+	int flagFlujo = 1;		
+	int flagReceptor = 0;		
+	int clientPort;
 	/* Look up the host information for the remote host
 	 * that we have connected with.  Its internet address
 	 * was returned by the accept call, in the main
@@ -364,8 +370,11 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			 */
 			 /* inet_ntop para interoperatividad con IPv6 */
             if (inet_ntop(AF_INET, &(clientaddr_in.sin_addr), hostname, MAXHOST) == NULL)
-            	perror(" inet_ntop \n");
+            	perror(" inet_ntop \n");	
+
+
              }
+			 
     /* Log a startup message. */
     time (&timevar);
 		/* The port number must be converted first to host byte
@@ -374,8 +383,8 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		 * that this program could easily be ported to a host
 		 * that does require it.
 		 */
-	printf("Startup from %s port %u at %s",
-		hostname, ntohs(clientaddr_in.sin_port), (char *) ctime(&timevar));
+	clientPort = ntohs(clientaddr_in.sin_port);
+	fprintf(fPet,"Startup from %s on IP %s and port %u with protocol TCP at %s \n", hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort, (char *) ctime(&timevar));
 
 	//Le notificamos al cliente que el servidorTCP ya está operativo
 	if (send(s,ack, BUFFERSIZE, 0) != BUFFERSIZE){
@@ -383,6 +392,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		printf("%s: send 220 error\n", "serverTCP");
 		return;
 	} 
+	fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ack);
 
 		/* Set the socket for a lingering, graceful close.
 		 * This will cause a final close of this socket to wait until all of the
@@ -435,12 +445,12 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			/* Send a response back to the client. */
 		buf[len]='\0';
 		//Tratamos la orden recibida y su respuesta igual que con serverUDP
-		fprintf(stdout,"SERVIDOR - Recibo: %s\n",buf);
+		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- RECIBO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,buf);
 		char *checker = NULL;
 
 		//Mientras lea data
 
-		if(flagData == 0){
+		if(flagFlujo == 4){
 			// Está leyendo data, solo va a parar cuando lea un . solo. Revisar strcmp
 			checker = strstr(buf, ".");	
 			if(checker == buf){
@@ -450,55 +460,75 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 					printf("%s: send FINTXT 250 error\n", "serverTCP");
 					return;
 				} 
-				flagData = 1;
+					fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+					flagFlujo = 2;
+					flagReceptor = 0;
 				continue;
 			}
 			continue;
 		}
 		checker = strstr(buf, "HELO");	
-		if(checker == buf){
+		if(checker == buf && flagFlujo == 1){
 			// Comienza por HELO
 			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
 					perror("serverTCP: No se ha podido enviar el mensaje de OK en HELO");
 					printf("%s: send HELO 250 error\n", "serverTCP");
 					return;
 				} 
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+			flagFlujo=2;
 			continue;
 		}
 
 		checker = strstr(buf, "MAIL FROM:");
-		if(checker == buf){
+		if(checker == buf && flagFlujo == 2){
 			// Comienza por MAIL FROM:
-			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
-					perror("serverTCP: No se ha podido enviar el mensaje de OK en MAIL FROM");
-					printf("%s: send MAIL 250 error\n", "serverTCP");
-					return;
-				} 
-			continue;
+			// Comprobamos que el email sea válido.
+
+			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
+			
+				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+						perror("serverTCP: No se ha podido enviar el mensaje de OK en MAIL FROM");
+						printf("%s: send MAIL 250 error\n", "serverTCP");
+						return;
+					} 
+				fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+				flagFlujo = 3;
+				continue;
+			}
+			// Al no ser válido, continuará hacia abajo hasta que mande el error 500 error de sintaxis
 		}
 
 		checker = strstr(buf, "RCPT TO:");
-		if(checker == buf){
+		if(checker == buf && flagFlujo == 3){
 			// Comienza por RCPT TO:
-			if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
-					perror("serverTCP: No se ha podido enviar el mensaje de OK en RCPT TO");
-					printf("%s: send RCPT 250 error\n", "serverTCP");
-					return;
-				} 
-			continue;
+			// Comprobamos que el email sea válido.
+
+			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
+
+				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
+						perror("serverTCP: No se ha podido enviar el mensaje de OK en RCPT TO");
+						printf("%s: send RCPT 250 error\n", "serverTCP");
+						return;
+					}
+				fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+				flagReceptor = 1;
+				continue;
+			}
+			// Al no ser válido, continuará hacia abajo hasta que mande el error 500 error de sintaxis
 		}
 
 		checker = strstr(buf, "DATA");
-		if(checker == buf){
+		if(checker == buf && flagFlujo == 3 && flagReceptor != 0){
 			// Comienza por DATA
+			// Activar el flag de que está leyendo DATA
+			flagFlujo=4;
 			if(send (s, dataRes, BUFFERSIZE, 0) != BUFFERSIZE){
 					perror("serverTCP: No se ha podido enviar el mensaje de 354 en DATA");
 					printf("%s: send DATA 354 error\n", "serverTCP");
 					return;
-				} 
-			
-			// Activar el flag de que está leyendo DATA
-			flagData = 0;
+				} 		
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,dataRes);
 			continue;
 		}
 		
@@ -510,7 +540,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 					printf("%s: send QUIT 221 error\n", "serverTCP");
 					return;
 				} 
-			
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,quitRes);
 			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
 			
 			continue;
@@ -526,6 +556,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 					printf("%s: send ERRSYN 500 error\n", "serverTCP");
 					return;
 				} 
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,errRes);
 			continue;
 	}
 
@@ -550,8 +581,8 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		 * that does require it.
 		 */
 
-	/*printf("Completed %s port %u, %d requests, at %s\n",
-		hostname, ntohs(clientaddr_in.sin_port), reqcnt, (char *) ctime(&timevar));*/
+	fprintf(fPet,"Completed %s  IP:%s port %u, on TCP protocol, at %s\n",
+		hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort, (char *) ctime(&timevar));
 }
 
 /*
@@ -559,7 +590,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
  */
 void errout(char *hostname)
 {
-	printf("Connection with %s aborted on error\n", hostname);
+	fprintf(stderr,"Connection with %s aborted on error\n", hostname);
 	exit(1);     
 }
 
@@ -578,9 +609,13 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 {
     struct in_addr reqaddr;	/* for requested host's address */
     struct hostent *hp;		/* pointer to host info for requested host */
-    int nc, errcode;
-	int flagData = 1;
+    int nc, errcode,status;
+	int flagFlujo = 1;
+	int flagReceptor = 0;
+	int clientPort;
     struct addrinfo hints, *res;
+	char hostname[MAXHOST];
+	long timevar;			/* contains time returned by time() */
 
 	int addrlen;
    	addrlen = sizeof(struct sockaddr_in);
@@ -604,6 +639,25 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 	Luego, entrará en bucle infinito hasta que se active una flag, que será cuando reciba QUIT ó algún error.
 	En este bucle infinito lo primeroque hace es recibir, con la linea recibida saca la orden o error y hace lo necesario
 */
+	 status = getnameinfo((struct sockaddr *)&clientaddr_in,sizeof(clientaddr_in),
+                           hostname,MAXHOST,NULL,0,0);
+     if(status){
+           	/* The information is unavailable for the remote
+			 * host.  Just format its internet address to be
+			 * printed out in the logging information.  The
+			 * address will be shown in "internet dot format".
+			 */
+			 /* inet_ntop para interoperatividad con IPv6 */
+            if (inet_ntop(AF_INET, &(clientaddr_in.sin_addr), hostname, MAXHOST) == NULL)
+            	perror(" inet_ntop \n");	
+             }
+			 
+    /* Log a startup message. */
+    time (&timevar);
+	clientPort = ntohs(clientaddr_in.sin_port);
+	fprintf(fPet,"Startup from %s on IP %s and port %u with protocol UDP at %s \n", hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort, (char *) ctime(&timevar));
+
+
 	nc = sendto (s, ack, strlen(ack), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 	if (nc == -1) {
@@ -611,6 +665,8 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 		printf("%s: sendto 220 error\n", "serverUDP");
 		return;
 	}
+
+	fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ack);
 
 	while(flagQuit != 0) {
 
@@ -628,12 +684,12 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 		/*
 		 Ahora en buffer tenemos la req del cliente, tenemos que tratarla y hacer lo consecuente
 		*/
-		fprintf(stdout,"SERVIDOR - Recibo: %s\n",buffer);
+		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - RECIBO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,buffer);
 		
 			
 		char *checker = NULL;
 
-		if(flagData == 0){
+		if(flagFlujo == 4){
 			// Está leyendo data, solo va a parar cuando lea un . solo
 
 			/* 
@@ -650,7 +706,9 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 					printf("%s: sendto FINTXT 250 error\n", "serverUDP");
 					return;
 				}
-				flagData = 1;
+				fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+				flagFlujo = 2;
+				flagReceptor = 0;
 				continue;
 			}
 			// Sigue recibiendo datos ya que todavía no ha llegado el punto solitario
@@ -658,7 +716,7 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 		}
 
 		checker = strstr(buffer, "HELO");	
-		if(checker == buffer){
+		if(checker == buffer && flagFlujo == 1){
 			// Comienza por HELO
 			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
@@ -667,38 +725,57 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 				printf("%s: sendto HELO 250 error\n", "serverUDP");
 				return;
 			}
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+			flagFlujo = 2;
 			continue;
 		}
 
 		checker = strstr(buffer, "MAIL FROM:");
-		if(checker == buffer){
+		if(checker == buffer && flagFlujo == 2){
 			// Comienza por MAIL FROM:
-			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+			// Comprobamos que el email sea válido.
 
-			if (nc == -1) {
-				perror("serverUDP: No se ha podido enviar el mensaje de OK en MAIL");
-				printf("%s: sendto MAIL 250 error\n", "serverUDP");
-				return;
+			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
+
+				nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+				if (nc == -1) {
+					perror("serverUDP: No se ha podido enviar el mensaje de OK en MAIL");
+					printf("%s: sendto MAIL 250 error\n", "serverUDP");
+					return;
+				}
+				fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+				flagFlujo = 3;
+				continue;
 			}
-			continue;
+			// Al no ser válido, continuará hacia abajo hasta que mande el error 500 error de sintaxis
 		}
 
 		checker = strstr(buffer, "RCPT TO:");
-		if(checker == buffer){
+		if(checker == buffer && flagFlujo == 3){
 			// Comienza por RCPT TO:
-			nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+			// Comprobamos que el email sea válido.
 
-			if (nc == -1) {
-				perror("serverUDP: No se ha podido enviar el mensaje de OK en RCPT");
-				printf("%s: sendto RCPT 250 error\n", "serverUDP");
-				return;
+			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
+				nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
+
+				if (nc == -1) {
+					perror("serverUDP: No se ha podido enviar el mensaje de OK en RCPT");
+					printf("%s: sendto RCPT 250 error\n", "serverUDP");
+					return;
+				}
+				fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,ok);
+				flagReceptor = 1;
+				continue;
 			}
-			continue;
+			// Al no ser válido, continuará hacia abajo hasta que mande el error 500 error de sintaxis
 		}
 
 		checker = strstr(buffer, "DATA");
-		if(checker == buffer){
+		if(checker == buffer && flagFlujo == 3 && flagReceptor == 1){
 			// Comienza por DATA
+			// Activar un flag de que está leyendo DATA
+			flagFlujo = 4;
 			nc = sendto (s, dataRes, strlen(dataRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 			if (nc == -1) {
@@ -706,8 +783,7 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 				printf("%s: sendto DATA 354 error\n", "serverUDP");
 				return;
 			}
-			// Activar un flag de que está leyendo DATA
-			flagData = 0;
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,dataRes);
 			continue;
 		}
 		
@@ -721,6 +797,7 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 				printf("%s: sendto QUIT 221 error\n", "serverUDP");
 				return;
 			}
+			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,quitRes);
 			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
 			flagQuit = 0;
 			continue;
@@ -733,12 +810,30 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 
 		nc = sendto (s, errRes, strlen(errRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
-			if (nc == -1) {
+		if (nc == -1) {
 				perror("serverUDP: No se ha podido enviar el mensaje de 500 en ERRSYN");
 				printf("%s: sendto ERRSYN 500 error\n", "serverUDP");
 				return;
 			}
+		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,errRes);
 
 	}
-		 
+	fprintf(fPet,"Completed %s  IP:%s port %u, on UDP protocol, at %s\n",
+		hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort, (char *) ctime(&timevar));	 
  }
+
+
+int validEmail(char str[]){
+	int i = 0;
+	fprintf(stdout,"%s\n",str);
+	do{
+		i++;
+		if(str[i] == '\0') i=0;
+		if(str[i] == '@'){
+			if(str[i-1] != '\0' && str[i+1] != '\0'){
+				return 1;
+			}
+		}
+	}while(i != 0);
+	return 0;
+}

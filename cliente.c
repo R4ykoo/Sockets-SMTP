@@ -69,6 +69,7 @@ char *argv[];
     ssize_t read;
 	char * checker = NULL;
 	int flagData = 0;
+    int dataValido = 0;
 	int retry = RETRIES;		/* holds the retry count for UDP*/
     int	n_retry;
     struct sigaction vec;
@@ -155,32 +156,65 @@ char *argv[];
                 argv[1], ntohs(myaddr_in.sin_port), (char *) ctime(&timevar));
 
 
-        //Abrir el archivo
+        //Abrir el archivo ordenes
         FILE *fOrd = fopen(argv[3], "r");
-
+        //Archivo log del cliente TCP
+        char nombreLog[20];
+        char extension[9] = ".txt";
+        sprintf(nombreLog,"%u",ntohs(myaddr_in.sin_port));
+        strcat(nombreLog,extension);
+        
+        FILE *fLog = fopen(nombreLog,"a"); // para no sobreescribir en caso de que ya exista el archivo
         if (fOrd == NULL){
                 perror(argv[0]);
-                fprintf(stderr, "Error al abrir el archivo %s", argv[2]);
+                fprintf(stderr, "Error al abrir el archivo %s", argv[3]);
+                exit(1);
+        }
+        if (fLog == NULL){
+                perror(argv[0]);
+                fprintf(stderr, "Error al abrir el archivo %s", nombreLog);
                 exit(1);
         }
         i = recv(s, buffer, BUFFERSIZE, 0);
         if (i == -1) {
                 perror(argv[0]);
-                fprintf(stderr, "%s: error reading result\n", argv[0]);
+                fprintf(fLog, "%s: error reading result\n", argv[0]);
                 exit(1);
             }
         else{
-            fprintf(stdout,"CLIENTETCP antes while - Recibo: %s\n",buffer);
+            fprintf(fLog,"CLIENTETCP antes while - Recibo: %s\n",buffer);
                 while ((read = getline(&line, &len, fOrd)) != -1) {				
                     /*
                         Enviará las lineas del fichero de ordenes y esperará respuesta.
                         Si se envía DATA, no espera respuestas hasta que envíe .
                     */
+
+                    /*
+                        Los mensajes en SMTP acaban todos con \r\n, nosotros leemos de ficheros, pero dependiendo
+                        del SO donde se creó el fichero acabará de una manera u otra.
+                        Cuando introduzcamos un enter en un archivo acaba así:
+                        Unix -> \n
+                        Legacy Mac -> \r
+                        Windows -> \r\n
+
+                        Dado que en read tenemos la longitud de la cadena leida, y sabemos lo anterior:
+                        En Windows read-2 sería \r y en Unix sería el último caracter de la linea
+                        asi podemos discriminar entre Windows y Unix/Mac
+                        si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
+                        para mandar un mensaje terminado en \r\n
+                    */
+	
+                    if(line[read-2] != '\r'){
+                        line[read-1] = '\r';
+                        line[read] = '\n';
+                    }
+
                     if (send (s, line, BUFFERSIZE, 0) != BUFFERSIZE) {
                         perror(argv[0]);
-                        fprintf(stderr, "%s: unable to send line on TCP\n", argv[0]);
+                        fprintf(fLog, "%s: unable to send line on TCP\n", argv[0]);
                         exit(1);
                     }				
+
                     // Si envío el . termino de enviar Data y puedo recibir respuesta
                     checker = strstr(line,".");
                     if(checker == line) flagData = 0;
@@ -189,22 +223,40 @@ char *argv[];
                         continue;
                     }
 
+                    checker = strstr(line, "RCPT TO:");
+                    if(checker == line){
+                        //debemos saber si el rcpt to era valido para poder enviar despues el data
+                        dataValido = 1;
+                    } 
+
+                    
+
                     i = recv(s, buffer, BUFFERSIZE, 0);
         
                     if ( i == -1) {
                         perror("clientTCP");
-                        fprintf(stderr,"%s: recv error\n", "clientTCP");
+                        fprintf(fLog,"%s: recv error\n", "clientTCP");
                         exit(1);
                     }
 
                     buffer[i]='\0';
-                    
-                    fprintf(stdout,"CLIENTETCP - Recibo: %s\n",buffer);			
-
+                           
+                    fprintf(fLog,"CLIENTETCP - Recibo: %s\n",buffer);	
+                    checker = strstr (buffer,"500");
+                    if (checker == buffer && dataValido == 1){
+                        //el rcpt to no era válido
+                        printf("NO VALIDO RCP TO\n");
+                        dataValido = 0;
+                    }		
+                  	
+                   
                     // Comienza el envío de DATA, espera a recibir la respuesta 354, y luego no espera recepcion hasta que 
                     // envíe un punto
                     checker = strstr(line, "DATA");
-                    if(checker == line) flagData = 1;
+                    if(checker == line && dataValido == 1){
+                        flagData = 1;
+                        dataValido = 0;
+                    } 
                     
                 }
         }
@@ -216,13 +268,15 @@ char *argv[];
             */
         if (shutdown(s, 1) == -1) {
             perror(argv[0]);
-            fprintf(stderr, "%s: unable to shutdown socket\n", argv[0]);
+            fprintf(fLog, "%s: unable to shutdown socket\n", argv[0]);
             exit(1);
         }
 
         /* Print message indicating completion of task. */
         time(&timevar);
-        printf("All done at %s", (char *)ctime(&timevar));
+        fprintf(fLog,"All done at %s", (char *)ctime(&timevar));
+        fclose(fLog);
+        fclose(fOrd);
     }
     else if(strcmp(argv[2],"UDP") == 0){
         /* Create the socket. */
@@ -305,18 +359,27 @@ char *argv[];
         n_retry=RETRIES;
         //Abrir el archivo
         FILE *fOrd = fopen(argv[3], "r");
-
+         //Archivo log del cliente TCP
+        char nombreLog[20];
+        char extension[9] = ".txt";
+        sprintf(nombreLog,"%u",ntohs(myaddr_in.sin_port));
+        strcat(nombreLog,extension);
+        FILE *fLog = fopen(nombreLog,"a"); // para no sobreescribir en caso de que ya exista el archivo
         if (fOrd == NULL){
                 perror(argv[0]);
                 fprintf(stderr, "Error al abrir el archivo %s", argv[3]);
                 exit(1);
         }
-        
+         if (fLog == NULL){
+                perror(argv[0]);
+                fprintf(stderr, "Error al abrir el archivo %s", nombreLog);
+                exit(1);
+        }
         while (n_retry > 0) {
             /* Send the request to the nameserver. */
             if (sendto (s, argv[2], strlen(argv[2]), 0, (struct sockaddr *)&servaddr_in,sizeof(struct sockaddr_in)) == -1) {
                     perror(argv[0]);
-                    fprintf(stderr, "%s: unable to send request\n", argv[0]);
+                    fprintf(fLog, "%s: unable to send request\n", argv[0]);
                     exit(1);
             }
             /* Set up a timeout so I don't hang in case the packet
@@ -331,30 +394,51 @@ char *argv[];
                         * Need to retry the request if we have
                         * not already exceeded the retry limit.
                         */
-                    printf("attempt %d (retries %d).\n", n_retry, RETRIES);
+                    fprintf(fLog,"attempt %d (retries %d).\n", n_retry, RETRIES);
                     n_retry--; 
                 } 
                 else  {
-                    printf("Unable to get response from");
+                    fprintf(fLog,"Unable to get response from");
                     exit(1); 
                 }
             }
             else {
-                fprintf(stdout,"CLIENTEUDP antes while - Recibo: %s\n",buffer);
+                fprintf(fLog,"CLIENTEUDP antes while - Recibo: %s\n",buffer);
                 while ((read = getline(&line, &len, fOrd)) != -1) {
                     
                     //fprintf(stdout,"CLIENTUDP - Envio: %s", line);
                     /*
                         Enviará las lineas del fichero de ordenes y esperará respuesta.
                         Si se envía DATA, no espera respuestas hasta que envíe .
+                        
                     */
-                    if (sendto (s, line, strlen(line), 0, (struct sockaddr *)&servaddr_in, sizeof(struct sockaddr_in)) == -1) {
-                        perror(argv[0]);
-                        fprintf(stderr, "%s: unable to send request\n", argv[0]);
-                        exit(1);
+                    
+
+                    /*
+                        Los mensajes en SMTP acaban todos con \r\n, nosotros leemos de ficheros, pero dependiendo
+                        del SO donde se creó el fichero acabará de una manera u otra.
+                        Cuando introduzcamos un enter en un archivo acaba así:
+                        Unix -> \n
+                        Legacy Mac -> \r
+                        Windows -> \r\n
+
+                        Dado que en read tenemos la longitud de la cadena leida, y sabemos lo anterior:
+                        En Windows read-2 sería \r y en Unix sería el último caracter de la linea
+                        asi podemos discriminar entre Windows y Unix/Mac
+                        si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
+                        para mandar un mensaje terminado en \r\n
+                    */
+	
+                    if(line[read-2] != '\r'){
+                        line[read-1] = '\r';
+                        line[read] = '\n';
                     }
 
-                    
+                    if (sendto (s, line, strlen(line), 0, (struct sockaddr *)&servaddr_in, sizeof(struct sockaddr_in)) == -1) {
+                        perror(argv[0]);
+                        fprintf(fLog, "%s: unable to send request\n", argv[0]);
+                        exit(1);
+                    }                    
                     
                     // Si envío el . termino de enviar Data y puedo recibir respuesta
                     checker = strstr(line,".");
@@ -364,22 +448,38 @@ char *argv[];
                         continue;
                     }
 
+                    checker = strstr(line, "RCPT TO:");
+                    if(checker == line){
+                        //debemos saber si el rcpt to era valido para poder enviar despues el data
+                        dataValido = 1;
+                    } 
+
                     nc = recvfrom(s, buffer, BUFFERSIZE - 1, 0,	(struct sockaddr *)&servaddr_in, &addrlen);
         
                     if ( nc == -1) {
                         perror("clientUDP");
-                        fprintf(stderr,"%s: recvfrom error\n", "clientUDP");
+                        fprintf(fLog,"%s: recvfrom error\n", "clientUDP");
                         exit(1);
                     }
 
                     buffer[nc]='\0';
                     
-                    fprintf(stdout,"CLIENTEUDP - Recibo: %s\n",buffer);			
+                    fprintf(fLog,"CLIENTEUDP - Recibo: %s\n",buffer);			
+
+                    checker = strstr (buffer,"500");
+                    if (checker == buffer && dataValido == 1){
+                        //el rcpt to no era válido
+                        printf("NO VALIDO RCP TO\n");
+                        dataValido = 0;
+                    }		
 
                     // Comienza el envío de DATA, espera a recibir la respuesta 354, y luego no espera recepcion hasta que 
                     // envíe un punto
                     checker = strstr(line, "DATA");
-                    if(checker == line) flagData = 1;
+                    if(checker == line && dataValido == 1){
+                        flagData = 1;
+                        dataValido = 0;
+                    } 
                     
                 }
                 break;	
@@ -387,8 +487,11 @@ char *argv[];
         }
 
         if (n_retry == 0) {
-            printf("Unable to get response from");
-            printf(" %s after %d attempts.\n", argv[1], RETRIES);
+            fprintf(fLog,"Unable to get response from");
+            fprintf(fLog," %s after %d attempts.\n", argv[1], RETRIES);
         }
+
+        fclose(fLog);
+        fclose(fOrd);
     }
 }
