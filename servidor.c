@@ -20,7 +20,7 @@
 
 #define PUERTO 15667
 #define ADDRNOTFOUND	0xffffffff	/* return address for unfound host */
-#define BUFFERSIZE	1024	/* maximum size of packets to be received */
+#define BUFFERSIZE	516	/* maximum size of packets to be received */
 #define TAM_BUFFER 10
 #define MAXHOST 128
 
@@ -35,7 +35,7 @@ extern int errno;
  *	will loop forever, until killed by a signal.
  *
  */
- 
+
 int validEmail(char str[]); // Funcion para comprobar que los emails son válidos
 void serverTCP(int s, struct sockaddr_in peeraddr_in);
 void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in);
@@ -159,10 +159,10 @@ char *argv[];
 			 * server to handle each one.
 			 */
 		
-		/*
+		
 			fclose(stdin);
 			fclose(stderr);
-		*/
+		
 		
 
 			/* Set SIGCLD to SIG_IGN, in order to prevent
@@ -446,15 +446,15 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		buf[len]='\0';
 		//Tratamos la orden recibida y su respuesta igual que con serverUDP
 		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- RECIBO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,buf);
-		char *checker = NULL;
+		
 
+		char *checker = NULL;		
 		//Mientras lea data
-
 		if(flagFlujo == 4){
 			// Está leyendo data, solo va a parar cuando lea un . solo. Revisar strcmp
-			checker = strstr(buf, ".");	
-			if(checker == buf){
-				// Fin de envío de datos
+			checker = strstr(buf, ".");
+			if( checker == buf) {
+				// Fin de envío de datos	
 				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
 					perror("serverTCP: No se ha podido enviar el mensaje de OK en FINTXT");
 					printf("%s: send FINTXT 250 error\n", "serverTCP");
@@ -464,7 +464,8 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 					flagFlujo = 2;
 					flagReceptor = 0;
 				continue;
-			}
+				
+			}	
 			continue;
 		}
 		checker = strstr(buf, "HELO");	
@@ -486,7 +487,6 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			// Comprobamos que el email sea válido.
 
 			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
-			
 				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
 						perror("serverTCP: No se ha podido enviar el mensaje de OK en MAIL FROM");
 						printf("%s: send MAIL 250 error\n", "serverTCP");
@@ -505,7 +505,6 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			// Comprobamos que el email sea válido.
 
 			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
-
 				if(send (s, ok, BUFFERSIZE, 0) != BUFFERSIZE){
 						perror("serverTCP: No se ha podido enviar el mensaje de OK en RCPT TO");
 						printf("%s: send RCPT 250 error\n", "serverTCP");
@@ -543,7 +542,7 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,quitRes);
 			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
 			
-			continue;
+			break;
 		}
 		
 		/*
@@ -736,7 +735,6 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 			// Comprobamos que el email sea válido.
 
 			if(validEmail(checker) != 0){ // El email es valido, mandamos ok
-
 				nc = sendto (s, ok, strlen(ok), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 				if (nc == -1) {
@@ -800,7 +798,7 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,quitRes);
 			// activamos flag para que pare de recibir mensajes y se cierre el servicio.
 			flagQuit = 0;
-			continue;
+			break;
 		}
 		
 		/*

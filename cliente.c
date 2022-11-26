@@ -21,7 +21,7 @@
 extern int errno;
 #define PUERTO 15667
 #define TAM_BUFFER 10
-#define BUFFERSIZE	1024	/* maximum size of packets to be received */
+#define BUFFERSIZE	516	/* maximum size of packets to be received */
 #define ADDRNOTFOUND	0xffffffff	/* value returned for unknown host */
 #define RETRIES	5		/* number of times to retry before givin up */
 #define TIMEOUT 6
@@ -189,7 +189,7 @@ char *argv[];
                         Si se envía DATA, no espera respuestas hasta que envíe .
                     */
 
-                    /*
+                  /*
                         Los mensajes en SMTP acaban todos con \r\n, nosotros leemos de ficheros, pero dependiendo
                         del SO donde se creó el fichero acabará de una manera u otra.
                         Cuando introduzcamos un enter en un archivo acaba así:
@@ -203,11 +203,20 @@ char *argv[];
                         si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
                         para mandar un mensaje terminado en \r\n
                     */
-	
-                    if(line[read-2] != '\r'){
-                        line[read-1] = '\r';
-                        line[read] = '\n';
-                    }
+			checker = strstr(line,"QUIT");
+
+			if(line[read-2] != '\r'){
+				if (checker != NULL){
+					line[read] = '\r';
+                          		line[read+1] = '\n';
+				}
+
+				else{
+                          		line[read-1] = '\r';
+                          		line[read] = '\n';
+				}
+                        }
+		       
 
                     if (send (s, line, BUFFERSIZE, 0) != BUFFERSIZE) {
                         perror(argv[0]);
@@ -217,7 +226,9 @@ char *argv[];
 
                     // Si envío el . termino de enviar Data y puedo recibir respuesta
                     checker = strstr(line,".");
-                    if(checker == line) flagData = 0;
+                    if(checker == line ){
+                        flagData = 0;
+                    } 
                     // Si estoy enviando data, no tengo que esperar a recibir nada hasta que envíe el .
                     if(flagData != 0){
                         continue;
@@ -245,7 +256,7 @@ char *argv[];
                     checker = strstr (buffer,"500");
                     if (checker == buffer && dataValido == 1){
                         //el rcpt to no era válido
-                        printf("NO VALIDO RCP TO\n");
+                        fprintf(fLog,"NO VALIDO RCP TO\n");
                         dataValido = 0;
                     }		
                   	
@@ -278,6 +289,7 @@ char *argv[];
         fclose(fLog);
         fclose(fOrd);
     }
+    //Socket UDP
     else if(strcmp(argv[2],"UDP") == 0){
         /* Create the socket. */
         s = socket (AF_INET, SOCK_DGRAM, 0);
@@ -362,6 +374,7 @@ char *argv[];
          //Archivo log del cliente TCP
         char nombreLog[20];
         char extension[9] = ".txt";
+        char mInicio [4] = "\r\n";
         sprintf(nombreLog,"%u",ntohs(myaddr_in.sin_port));
         strcat(nombreLog,extension);
         FILE *fLog = fopen(nombreLog,"a"); // para no sobreescribir en caso de que ya exista el archivo
@@ -377,7 +390,7 @@ char *argv[];
         }
         while (n_retry > 0) {
             /* Send the request to the nameserver. */
-            if (sendto (s, argv[2], strlen(argv[2]), 0, (struct sockaddr *)&servaddr_in,sizeof(struct sockaddr_in)) == -1) {
+            if (sendto (s, mInicio, strlen(mInicio), 0, (struct sockaddr *)&servaddr_in,sizeof(struct sockaddr_in)) == -1) {
                     perror(argv[0]);
                     fprintf(fLog, "%s: unable to send request\n", argv[0]);
                     exit(1);
@@ -405,16 +418,9 @@ char *argv[];
             else {
                 fprintf(fLog,"CLIENTEUDP antes while - Recibo: %s\n",buffer);
                 while ((read = getline(&line, &len, fOrd)) != -1) {
-                    
-                    //fprintf(stdout,"CLIENTUDP - Envio: %s", line);
-                    /*
-                        Enviará las lineas del fichero de ordenes y esperará respuesta.
-                        Si se envía DATA, no espera respuestas hasta que envíe .
-                        
-                    */
-                    
-
-                    /*
+                   
+		   
+                  /*
                         Los mensajes en SMTP acaban todos con \r\n, nosotros leemos de ficheros, pero dependiendo
                         del SO donde se creó el fichero acabará de una manera u otra.
                         Cuando introduzcamos un enter en un archivo acaba así:
@@ -428,17 +434,33 @@ char *argv[];
                         si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
                         para mandar un mensaje terminado en \r\n
                     */
-	
-                    if(line[read-2] != '\r'){
-                        line[read-1] = '\r';
-                        line[read] = '\n';
-                    }
+			checker = strstr(line,"QUIT");
+
+			if(line[read-2] != '\r'){
+				if (checker != NULL){
+					line[read] = '\r';
+                          		line[read+1] = '\n';
+				}
+
+				else{
+                          		line[read-1] = '\r';
+                          		line[read] = '\n';
+				}
+                        }
+		       
+
+		     /*
+                        Enviará las lineas del fichero de ordenes y esperará respuesta.
+                        Si se envía DATA, no espera respuestas hasta que envíe .
+                    */
 
                     if (sendto (s, line, strlen(line), 0, (struct sockaddr *)&servaddr_in, sizeof(struct sockaddr_in)) == -1) {
                         perror(argv[0]);
                         fprintf(fLog, "%s: unable to send request\n", argv[0]);
                         exit(1);
-                    }                    
+                    }
+
+                    
                     
                     // Si envío el . termino de enviar Data y puedo recibir respuesta
                     checker = strstr(line,".");
@@ -469,7 +491,7 @@ char *argv[];
                     checker = strstr (buffer,"500");
                     if (checker == buffer && dataValido == 1){
                         //el rcpt to no era válido
-                        printf("NO VALIDO RCP TO\n");
+                        fprintf(fLog,"NO VALIDO RCP TO\n");
                         dataValido = 0;
                     }		
 
