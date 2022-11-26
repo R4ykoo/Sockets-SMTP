@@ -823,7 +823,6 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 
 int validEmail(char str[]){
 	int i = 0;
-	fprintf(stdout,"%s\n",str);
 	do{
 		i++;
 		if(str[i] == '\0') i=0;
