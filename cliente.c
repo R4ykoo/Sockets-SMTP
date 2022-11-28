@@ -232,15 +232,7 @@ char *argv[];
                     // Si estoy enviando data, no tengo que esperar a recibir nada hasta que envíe el .
                     if(flagData != 0){
                         continue;
-                    }
-
-                    checker = strstr(line, "RCPT TO:");
-                    if(checker == line){
-                        //debemos saber si el rcpt to era valido para poder enviar despues el data
-                        dataValido = 1;
-                    } 
-
-                    
+                    }                    
 
                     i = recv(s, buffer, BUFFERSIZE, 0);
         
@@ -252,12 +244,25 @@ char *argv[];
 
                     buffer[i]='\0';
                            
-                    fprintf(fLog,"CLIENTETCP - Recibo: %s\n",buffer);	
-                    checker = strstr (buffer,"500");
-                    if (checker == buffer && dataValido == 1){
-                        //el rcpt to no era válido
-                        fprintf(fLog,"NO VALIDO RCP TO\n");
-                        dataValido = 0;
+                    fprintf(fLog,"CLIENTETCP - Recibo: %s\n",buffer);
+
+                    /* Si he enviado un RCPT TO y la respuesta ha sido 250 OK,
+                        significa que ya tengo al menos un receptor, por lo que puedo enviar DATA
+                        No hace falta verificar que el MAIL FROM: tambien es correcto, porque si 
+                        fuera incorrecto, no podría enviar RCPT TO correctamente.
+                        Por lo que con la comprobacion de que al menos haya un receptor OK, tenemos via libre
+                    */
+
+                    checker = strstr(line, "RCPT TO:");
+                    if(checker == line){
+                        // He enviado un RCPT TO, compruebo la respuesta
+                        checker = strstr(buffer, "250");
+                        if(checker == buffer){
+                            dataValido = 1;
+                        }else{
+                            fprintf(fLog,"NO VALIDO RCPT TO\n");
+                            dataValido = 0;
+                        }
                     }		
                   	
                    
@@ -434,22 +439,21 @@ char *argv[];
                         si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
                         para mandar un mensaje terminado en \r\n
                     */
-			checker = strstr(line,"QUIT");
+                    checker = strstr(line,"QUIT");
 
-			if(line[read-2] != '\r'){
-				if (checker != NULL){
-					line[read] = '\r';
-                          		line[read+1] = '\n';
-				}
-
-				else{
-                          		line[read-1] = '\r';
-                          		line[read] = '\n';
-				}
+                    if(line[read-2] != '\r'){
+                        if (checker != NULL){
+                            line[read] = '\r';
+                            line[read+1] = '\n';
                         }
+                        else{
+                            line[read-1] = '\r';
+                            line[read] = '\n';
+                        }
+                    }
 		       
 
-		     /*
+		            /*
                         Enviará las lineas del fichero de ordenes y esperará respuesta.
                         Si se envía DATA, no espera respuestas hasta que envíe .
                     */
@@ -469,12 +473,7 @@ char *argv[];
                     if(flagData != 0){
                         continue;
                     }
-
-                    checker = strstr(line, "RCPT TO:");
-                    if(checker == line){
-                        //debemos saber si el rcpt to era valido para poder enviar despues el data
-                        dataValido = 1;
-                    } 
+                    
 
                     nc = recvfrom(s, buffer, BUFFERSIZE - 1, 0,	(struct sockaddr *)&servaddr_in, &addrlen);
         
@@ -488,12 +487,24 @@ char *argv[];
                     
                     fprintf(fLog,"CLIENTEUDP - Recibo: %s\n",buffer);			
 
-                    checker = strstr (buffer,"500");
-                    if (checker == buffer && dataValido == 1){
-                        //el rcpt to no era válido
-                        fprintf(fLog,"NO VALIDO RCP TO\n");
-                        dataValido = 0;
-                    }		
+                    /* Si he enviado un RCPT TO y la respuesta ha sido 250 OK,
+                        significa que ya tengo al menos un receptor, por lo que puedo enviar DATA
+                        No hace falta verificar que el MAIL FROM: tambien es correcto, porque si 
+                        fuera incorrecto, no podría enviar RCPT TO correctamente.
+                        Por lo que con la comprobacion de que al menos haya un receptor OK, tenemos via libre
+                    */
+
+                    checker = strstr(line, "RCPT TO:");
+                    if(checker == line){
+                        // He enviado un RCPT TO, compruebo la respuesta
+                        checker = strstr(buffer, "250");
+                        if(checker == buffer){
+                            dataValido = 1;
+                        }else{
+                            fprintf(fLog,"NO VALIDO RCPT TO\n");
+                            dataValido = 0;
+                        }
+                    }
 
                     // Comienza el envío de DATA, espera a recibir la respuesta 354, y luego no espera recepcion hasta que 
                     // envíe un punto
@@ -512,7 +523,10 @@ char *argv[];
             fprintf(fLog,"Unable to get response from");
             fprintf(fLog," %s after %d attempts.\n", argv[1], RETRIES);
         }
-
+        
+        /* Print message indicating completion of task. */
+        time(&timevar);
+        fprintf(fLog,"All done at %s", (char *)ctime(&timevar));
         fclose(fLog);
         fclose(fOrd);
     }

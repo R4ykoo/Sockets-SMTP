@@ -138,7 +138,8 @@ char *argv[];
 		 * with that terminal as its control terminal.  It is
 		 * always best for the parent to do the setpgrp.
 		 */
-	//Archivo .log
+	
+	// Archivo .log
 	fPet = fopen("peticiones.log","a");// no sobreescribe, escribe al final en caso de existir el archivo
 	setpgrp();
 
@@ -344,15 +345,22 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 
 
 	/*
-	Cogemos los mismos mensajes que hemos utilizado en el serverUDP
+		Establecemos los mensajes de respuesta del servidor.
+		Quizás podría ser interesante crear un struct donde un campo sea el número
+		y otro la descripcion de la respuesta, pero por simplificar código 
+		lo dejamos así
 	*/
     char ack[BUFFERSIZE]="220 Servicio de transferencia simple de correo preparado\r\n";
 	char ok[BUFFERSIZE] = "250 OK\r\n";
 	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
 	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
 	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
-	int flagFlujo = 1;		
-	int flagReceptor = 0;		
+	int flagFlujo = 1; /* Flag que asegura el correcto flujo de ordenes, para que sean ejecutadas 
+						  dentro de un orden lógico
+					   */
+	int flagReceptor = 0; /* 	Flag para asegurar que haya al menos 1 receptor antes de enviar DATA,
+								no podemos usar flagFlujo ya que puede haber varios Receptores	
+						  */
 	int clientPort;
 	/* Look up the host information for the remote host
 	 * that we have connected with.  Its internet address
@@ -444,14 +452,14 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		sleep(1);
 			/* Send a response back to the client. */
 		buf[len]='\0';
-		//Tratamos la orden recibida y su respuesta igual que con serverUDP
+		// Tratamos la orden recibida y su respuesta 
 		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- RECIBO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,buf);
 		
 
 		char *checker = NULL;		
-		//Mientras lea data
+		// Mientras lea DATA se queda leyendo sin enviar respuesta hasta el .
 		if(flagFlujo == 4){
-			// Está leyendo data, solo va a parar cuando lea un . solo. Revisar strcmp
+			// Está leyendo data, solo va a parar cuando lea un . 
 			checker = strstr(buf, ".");
 			if( checker == buf) {
 				// Fin de envío de datos	
@@ -551,12 +559,12 @@ void serverTCP(int s, struct sockaddr_in clientaddr_in)
 		*/
 
 		if(send (s, errRes, BUFFERSIZE, 0) != BUFFERSIZE){
-					perror("serverTCP: No se ha podido enviar el mensaje de 500 en ERRSYN");
-					printf("%s: send ERRSYN 500 error\n", "serverTCP");
-					return;
-				} 
-			fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,errRes);
-			continue;
+			perror("serverTCP: No se ha podido enviar el mensaje de 500 en ERRSYN");
+			printf("%s: send ERRSYN 500 error\n", "serverTCP");
+			return;
+		} 
+		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo TCP- ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,errRes);
+		continue;
 	}
 
 		/* The loop has terminated, because there are no
@@ -609,8 +617,6 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
     struct in_addr reqaddr;	/* for requested host's address */
     struct hostent *hp;		/* pointer to host info for requested host */
     int nc, errcode,status;
-	int flagFlujo = 1;
-	int flagReceptor = 0;
 	int clientPort;
     struct addrinfo hints, *res;
 	char hostname[MAXHOST];
@@ -619,24 +625,34 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 	int addrlen;
    	addrlen = sizeof(struct sockaddr_in);
 	/*
-		GERMAN:
-		Quizas es mejor que los mensajes sean structs con un elemento que sea el numero y otro que sea la descripcion
+		Establecemos los mensajes de respuesta del servidor.
+		Quizás podría ser interesante crear un struct donde un campo sea el número
+		y otro la descripcion de la respuesta, pero por simplificar código 
+		lo dejamos así
 	*/
-	char ack[BUFFERSIZE]="220 Servicio de transferencia simple de correo preparado\r\n";
+    char ack[BUFFERSIZE]="220 Servicio de transferencia simple de correo preparado\r\n";
 	char ok[BUFFERSIZE] = "250 OK\r\n";
 	char dataRes[BUFFERSIZE] = "354 Comenzando con el texto del correo, finalice con .\r\n";
 	char quitRes[BUFFERSIZE] = "221 Cerrando el servicio\r\n";
 	char errRes[BUFFERSIZE] = "500 Error de sintaxis\r\n";
+	int flagFlujo = 1; /* Flag que asegura el correcto flujo de ordenes, para que sean ejecutadas 
+						  dentro de un orden lógico
+					   */
+	int flagReceptor = 0; /* 	Flag para asegurar que haya al menos 1 receptor antes de enviar DATA,
+								no podemos usar flagFlujo ya que puede haber varios Receptores	
+						  */
 	int flagQuit = 1;
 	
-	/*Al no tener UDP confirmación, debemos enviar en bucle desde el cliente la misma línea de fichero hasta que recibamos aquí la línea 
-	y confirmemos que la hemos recibido para que pase a enviar la siguiente en bucle*/
+	/* Al no tener UDP confirmación, debemos enviar en bucle desde el cliente la misma línea de fichero 
+	hasta que recibamos aquí la línea y confirmemos que la hemos recibido para que pase a enviar 
+	la siguiente en bucle
+	*/
 
 /*
 	GERMAN:
 	Antes de entrar al bucle de req-res debería indicar que el servidor está preparado, mandando el mensaje 220
-	Luego, entrará en bucle infinito hasta que se active una flag, que será cuando reciba QUIT ó algún error.
-	En este bucle infinito lo primeroque hace es recibir, con la linea recibida saca la orden o error y hace lo necesario
+	Luego, entrará en bucle infinito hasta que se active una flag, que será cuando reciba QUIT.
+	En este bucle infinito lo primero que hace es recibir, con la linea recibida saca la orden o error y hace lo necesario
 */
 	 status = getnameinfo((struct sockaddr *)&clientaddr_in,sizeof(clientaddr_in),
                            hostname,MAXHOST,NULL,0,0);
@@ -809,10 +825,10 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 		nc = sendto (s, errRes, strlen(errRes), 0, (struct sockaddr *)&clientaddr_in, addrlen);
 
 		if (nc == -1) {
-				perror("serverUDP: No se ha podido enviar el mensaje de 500 en ERRSYN");
-				printf("%s: sendto ERRSYN 500 error\n", "serverUDP");
-				return;
-			}
+			perror("serverUDP: No se ha podido enviar el mensaje de 500 en ERRSYN");
+			printf("%s: sendto ERRSYN 500 error\n", "serverUDP");
+			return;
+		}
 		fprintf(fPet,"SERVIDOR %s con IP:%s, puerto %u y protocolo UDP - ENVIO: %s\n",hostname,inet_ntoa(clientaddr_in.sin_addr),clientPort,errRes);
 
 	}
@@ -822,6 +838,10 @@ void serverUDP(int s, char * buffer, struct sockaddr_in clientaddr_in)
 
 
 int validEmail(char str[]){
+	/*
+		Recibe por argumento la orden leida, y busca un @
+		Si existe un @, comprueba que tenga algo por delante y algo por detrás
+	*/
 	int i = 0;
 	do{
 		i++;
