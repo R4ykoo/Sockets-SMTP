@@ -69,7 +69,7 @@ char *argv[];
     ssize_t read;
 	char * checker = NULL;
 	int flagData = 0;
-    int dataValido = 0;
+    int dataValido = 0; // Solo podrá enviar Data si hay almenos un receptor valido
 	int retry = RETRIES;		/* holds the retry count for UDP*/
     int	n_retry;
     struct sigaction vec;
@@ -261,7 +261,6 @@ char *argv[];
                             dataValido = 1;
                         }else{
                             fprintf(fLog,"NO VALIDO RCPT TO\n");
-                            dataValido = 0;
                         }
                     }		
                   	
@@ -502,7 +501,6 @@ char *argv[];
                             dataValido = 1;
                         }else{
                             fprintf(fLog,"NO VALIDO RCPT TO\n");
-                            dataValido = 0;
                         }
                     }
 
