@@ -19,7 +19,7 @@
 #include <unistd.h>
 
 extern int errno;
-#define PUERTO 15667
+#define PUERTO 5667
 #define TAM_BUFFER 10
 #define BUFFERSIZE	516	/* maximum size of packets to be received */
 #define ADDRNOTFOUND	0xffffffff	/* value returned for unknown host */
@@ -203,19 +203,12 @@ char *argv[];
                         si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
                         para mandar un mensaje terminado en \r\n
                     */
-			checker = strstr(line,"QUIT");
+			
 
-			if(line[read-2] != '\r'){
-				if (checker != NULL){
-					line[read] = '\r';
-                          		line[read+1] = '\n';
-				}
-
-				else{
-                          		line[read-1] = '\r';
-                          		line[read] = '\n';
-				}
-                        }
+			        if(line[read-2] != '\r'){
+                        line[read-1] = '\r';
+                        line[read] = '\n';
+                    }
 		       
 
                     if (send (s, line, BUFFERSIZE, 0) != BUFFERSIZE) {
@@ -260,7 +253,7 @@ char *argv[];
                         if(checker == buffer){
                             dataValido = 1;
                         }else{
-                            fprintf(fLog,"NO VALIDO RCPT TO\n");
+                            fprintf(fLog,"NO VALIDO RCPT TO\n\n");
                         }
                     }		
                   	
@@ -438,17 +431,9 @@ char *argv[];
                         si estamos en Unix/Mac, tendremos que escribir en read-1 un \r y en read \n
                         para mandar un mensaje terminado en \r\n
                     */
-                    checker = strstr(line,"QUIT");
-
                     if(line[read-2] != '\r'){
-                        if (checker != NULL){
-                            line[read] = '\r';
-                            line[read+1] = '\n';
-                        }
-                        else{
-                            line[read-1] = '\r';
-                            line[read] = '\n';
-                        }
+                        line[read-1] = '\r';
+                        line[read] = '\n';                      
                     }
 		       
 
@@ -500,7 +485,7 @@ char *argv[];
                         if(checker == buffer){
                             dataValido = 1;
                         }else{
-                            fprintf(fLog,"NO VALIDO RCPT TO\n");
+                            fprintf(fLog,"NO VALIDO RCPT TO\n\n");
                         }
                     }
 

@@ -18,7 +18,7 @@
 #include <unistd.h>
 
 
-#define PUERTO 15667
+#define PUERTO 5667
 #define ADDRNOTFOUND	0xffffffff	/* return address for unfound host */
 #define BUFFERSIZE	516	/* maximum size of packets to be received */
 #define TAM_BUFFER 10
@@ -264,7 +264,8 @@ char *argv[];
                 * null terminated.
                 */
                 buffer[cc]='\0';
-                //Como aquí no se crea automático un socket al recibir (como en TCP) lo creamos para que posteriormente se encargue el hijo y liberar el principal -> s_UDP_hijo
+                /*Como aquí no se crea automático un socket al recibir (como en TCP con el accept) 
+				lo creamos para que posteriormente se encargue el hijo y liberar el principal -> s_UDP_hijo*/
                 myaddr_in.sin_family = AF_INET;
 			    myaddr_in.sin_addr.s_addr = INADDR_ANY;
                 myaddr_in.sin_port = 0; 
