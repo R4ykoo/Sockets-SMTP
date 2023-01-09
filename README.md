@@ -6,8 +6,8 @@
  El enunciado de la practica es **61769326Sockets2022_G.pdf**  
  
  Ejecutar make y posteriormente LanzaServidor.sh para ejecutar 6 clientes a la vez con un servidor.  
- Para lanzar un servidor (siempre que no haya uno corriendo ya) : ./servidor
- Para lanzar un cliente: ./cliente [IP] [PROTOCOLO] [FICHERO DE ORDENES]
+ Para lanzar un servidor (siempre que no haya uno corriendo ya) : ./servidor  
+ Para lanzar un cliente: ./cliente [IP] [PROTOCOLO] [FICHERO DE ORDENES]  
  Para matar el servidor: pkill servidor  
  
  
