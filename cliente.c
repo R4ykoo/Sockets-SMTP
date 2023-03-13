@@ -1,8 +1,8 @@
 /*
 * Fichero: cliente.c
 * Autores:
-* Daniel Lázaro Rubio DNI 70915667C
-* Germán Francés Tostado DNI 70940996A
+* Yo
+* Mi colega el dani
 */
 #include <sys/types.h>
 #include <sys/socket.h>
